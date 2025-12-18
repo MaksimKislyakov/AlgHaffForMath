@@ -1,5 +1,27 @@
+'''RSA — это асимметричный алгоритм шифрования, названный по первым буквам фамилий его создателей'''
+
+
 import random
 import math
+import os
+
+# упрощённая эмуляция PKCS#1 v1.5
+def simple_pad(message: bytes, k: int) -> int:
+    """Упрощённый паддинг: добавляем случайные байты спереди."""
+    if len(message) > k - 10:
+        raise ValueError("Сообщение слишком длинное")
+    padding = os.urandom(k - len(message) - 1)  # случайные байты
+    padded = b'\x00' + padding + b'\x01' + message
+    return int.from_bytes(padded, 'big')
+
+def simple_unpad(padded_int: int, k: int) -> bytes:
+    padded = padded_int.to_bytes(k, 'big')
+    if padded[0] != 0:
+        raise ValueError("Неверный паддинг")
+    idx = padded.rfind(b'\x01')
+    if idx == -1:
+        raise ValueError("Разделитель не найден")
+    return padded[idx+1:]
 
 def is_prime(n, k=5):
     """Тест Миллера–Рабина на простоту (вероятностный)."""
@@ -54,15 +76,20 @@ def modinv(a, m):
 
 def generate_rsa_keys(bits=512):
     """Генерирует пару ключей RSA."""
+    # Функция generate_prime(bits) генерирует случайное простое число длиной bits бит
+    # Чтобы убедиться, что число простое, используется тест Миллера–Рабина (is_prime)
     p = generate_prime(bits // 2)
     q = generate_prime(bits // 2)
     while p == q:
         q = generate_prime(bits // 2)
 
+    # n это публичная часть ключа
     n = p * q
+    # Вычисление функции Эйлера. это количество чисел, меньших n, взаимно простых с ним
+    # Это секретное значение, нужно только для генерации ключей
     phi = (p - 1) * (q - 1)
 
-    # Выбираем открытую экспоненту e
+    # Выбираем открытую экспоненту e, должно быть взаимно просто с phi
     e = 65537  # стандартное значение (2^16 + 1), простое и эффективное
     if math.gcd(e, phi) != 1:
         # Редкий случай — выберем другое небольшое простое
@@ -70,6 +97,7 @@ def generate_rsa_keys(bits=512):
         if math.gcd(e, phi) != 1:
             e = 17
 
+    # Обратное число к e по модулю phi. Вычисляется с помощью расширенного алгоритма Евклида
     d = modinv(e, phi)
 
     public_key = (e, n)
@@ -86,24 +114,40 @@ def rsa_decrypt(ciphertext: int, private_key):
     d, n = private_key
     return pow(ciphertext, d, n)
 
-# === Пример использования ===
+
+def int_to_bytes(x: int):
+    return x.to_bytes((x.bit_length() + 7) // 8, 'big')
+
+def bytes_to_int(b):
+    return int.from_bytes(b, 'big')
+
+
 if __name__ == "__main__":
     # Генерация ключей
-    pub, priv = generate_rsa_keys(bits=128)  # 128 бит — только для демонстрации!
+    pub, priv = generate_rsa_keys(bits=512)  
     print("Открытый ключ (e, n):", pub)
     print("Закрытый ключ (d, n):", priv)
+    k = 256
 
-    # Сообщение — должно быть целым числом < n
-    message = 42
-    print(f"\nИсходное сообщение: {message}")
+    msg = "Меня зовут Максим! Hi".encode('utf-8')
+    print(f"Закодированное сообщение в байтах: {msg}")
+    padded_int = simple_pad(msg, k)
+    # print(f'"С солью": {padded_int}')
 
-    # Шифрование
-    ciphertext = rsa_encrypt(message, pub)
-    print(f"Шифротекст: {ciphertext}")
+    msg_int = bytes_to_int(msg)
+    #RSA работает только с целыми числами, а не со строками или байтами
+    print(f'Байты, преобразованные в число: {msg_int}')
 
-    # Расшифрование
-    decrypted = rsa_decrypt(ciphertext, priv)
-    print(f"Расшифровано: {decrypted}")
+    if msg_int >= pub[1]:
+        raise ValueError("Сообщение слишком длинное для текущего ключа")
+    
+    # Это зашифрованное сообщение — большое целое число, которое выглядит как случайный набор цифр
+    cipher_int = rsa_encrypt(msg_int, pub)
+    print(f'Зашифрованное слово {cipher_int}')
+    decrypted_int = rsa_decrypt(cipher_int, priv)
+    print(f'Расшифрованное слово: {decrypted_int}')
+    decrypted_msg = int_to_bytes(decrypted_int).decode('utf-8')
+    print(f'Восстановленное исходное сообщение: {decrypted_msg}')
 
-    assert message == decrypted, "Ошибка расшифровки!"
-    print("\n✅ Шифрование/расшифрование прошло успешно!")
+    # assert message == decrypted, "Ошибка расшифровки!"
+    # print("\n Шифрование/расшифрование прошло успешно!")
