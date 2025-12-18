@@ -8,6 +8,7 @@ ChaCha20 — это потоковый шифр, который можно ис�
 import os
 import time
 import hashlib
+import matplotlib.pyplot as plt
 
 
 def rotl32(v, n):
@@ -126,6 +127,36 @@ if __name__ == "__main__":
     key = hashlib.sha256(input_data).digest()
     rng = ChaCha20RNG(key)
 
-    print("Случайные числа от ChaCha20:")
-    for _ in range(10):
-        print(rng.rand32())
+    N = 100_000
+    data = [rng.rand32() / (2**32) for _ in range(N)]  # числа в [0, 1)
+
+    # === 1. Гистограмма ===
+    plt.figure(figsize=(10, 4))
+    plt.subplot(1, 2, 1)
+    plt.hist(data, bins=50, density=True, alpha=0.7, color='green')
+    plt.title("Гистограмма (ChaCha20)")
+    plt.xlabel("Значение")
+    plt.ylabel("Плотность")
+    plt.axhline(1.0, color='red', linestyle='--', label='Идеальная равномерность')
+    plt.legend()
+
+    # === 2. График последовательности (автокорреляция на глаз) ===
+    plt.subplot(1, 2, 2)
+    plt.plot(data[:200], '.', markersize=3)  # первые 200 точек
+    plt.title("Первые 200 значений")
+    plt.xlabel("Индекс")
+    plt.ylabel("Значение")
+    plt.ylim(0, 1)
+
+    plt.tight_layout()
+    plt.show()
+
+    # === 3. Статистика ===
+    mean_val = sum(data) / N
+    variance_val = sum((x - 0.5) ** 2 for x in data) / N
+
+    print(f"\n📊 Статистика по {N} числам:")
+    print(f"Среднее:       {mean_val:.5f} (ожидается ~0.50000)")
+    print(f"Дисперсия:     {variance_val:.5f} (ожидается ~0.08333 = 1/12)")
+    print(f"Отклонение среднего: {abs(mean_val - 0.5):.5f}")
+    print(f"Отклонение дисперсии: {abs(variance_val - 1/12):.5f}")
